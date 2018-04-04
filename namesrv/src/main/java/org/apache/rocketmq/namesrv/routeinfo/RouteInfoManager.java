@@ -17,17 +17,6 @@
 package org.apache.rocketmq.namesrv.routeinfo;
 
 import io.netty.channel.Channel;
-import java.util.HashMap;
-import java.util.HashSet;
-import java.util.Iterator;
-import java.util.LinkedList;
-import java.util.List;
-import java.util.Map;
-import java.util.Map.Entry;
-import java.util.Set;
-import java.util.concurrent.ConcurrentMap;
-import java.util.concurrent.locks.ReadWriteLock;
-import java.util.concurrent.locks.ReentrantReadWriteLock;
 import org.apache.rocketmq.common.DataVersion;
 import org.apache.rocketmq.common.MixAll;
 import org.apache.rocketmq.common.TopicConfig;
@@ -41,9 +30,16 @@ import org.apache.rocketmq.common.protocol.route.BrokerData;
 import org.apache.rocketmq.common.protocol.route.QueueData;
 import org.apache.rocketmq.common.protocol.route.TopicRouteData;
 import org.apache.rocketmq.common.sysflag.TopicSysFlag;
+import org.apache.rocketmq.namesrv.util.Utils;
 import org.apache.rocketmq.remoting.common.RemotingUtil;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+
+import java.util.*;
+import java.util.Map.Entry;
+import java.util.concurrent.ConcurrentMap;
+import java.util.concurrent.locks.ReadWriteLock;
+import java.util.concurrent.locks.ReentrantReadWriteLock;
 
 public class RouteInfoManager {
     private static final Logger log = LoggerFactory.getLogger(LoggerName.NAMESRV_LOGGER_NAME);
@@ -68,6 +64,25 @@ public class RouteInfoManager {
         clusterInfoSerializeWrapper.setBrokerAddrTable(this.brokerAddrTable);
         clusterInfoSerializeWrapper.setClusterAddrTable(this.clusterAddrTable);
         return clusterInfoSerializeWrapper.encode();
+    }
+
+    public byte[] getAllClusterInfo(boolean useIP2) {
+        if (!useIP2) {
+            return getAllClusterInfo();
+        }
+        ClusterInfo clusterInfoSerializeWrapper = new ClusterInfo();
+        clusterInfoSerializeWrapper.setBrokerAddrTable(replaceBrokerAddrTable(brokerAddrTable));
+        clusterInfoSerializeWrapper.setClusterAddrTable(this.clusterAddrTable);
+        return clusterInfoSerializeWrapper.encode();
+    }
+
+    public HashMap<String, BrokerData> replaceBrokerAddrTable(HashMap<String, BrokerData> brokerAddrTable) {
+        HashMap<String, BrokerData> brokerAddrTableClone = new HashMap<>();
+        for (Map.Entry<String, BrokerData> brokerAddr : brokerAddrTable.entrySet()) {
+            BrokerData brokerData = replaceIP1WithIP2(brokerAddr.getValue());
+            brokerAddrTableClone.put(brokerAddr.getKey(), brokerData);
+        }
+        return brokerAddrTableClone;
     }
 
     public void deleteTopic(final String topic) {
@@ -169,7 +184,7 @@ public class RouteInfoManager {
                         BrokerLiveInfo brokerLiveInfo = this.brokerLiveTable.get(masterAddr);
                         if (brokerLiveInfo != null) {
                             result.setHaServerAddr(brokerLiveInfo.getHaServerAddr());
-                            result.setMasterAddr(masterAddr);
+                            result.setMasterAddr(Utils.replace(masterAddr, brokerLiveInfo.getHaServerAddr()));
                         }
                     }
                 }
@@ -406,6 +421,77 @@ public class RouteInfoManager {
         return null;
     }
 
+    public TopicRouteData pickupTopicRouteData(final String topic, boolean useIP2) {
+        if (!useIP2) {
+            return pickupTopicRouteData(topic);
+        }
+        TopicRouteData topicRouteData = new TopicRouteData();
+        boolean foundQueueData = false;
+        boolean foundBrokerData = false;
+        Set<String> brokerNameSet = new HashSet<String>();
+        List<BrokerData> brokerDataList = new LinkedList<BrokerData>();
+        topicRouteData.setBrokerDatas(brokerDataList);
+
+        HashMap<String, List<String>> filterServerMap = new HashMap<String, List<String>>();
+        topicRouteData.setFilterServerTable(filterServerMap);
+
+        try {
+            try {
+                this.lock.readLock().lockInterruptibly();
+                List<QueueData> queueDataList = this.topicQueueTable.get(topic);
+                if (queueDataList != null) {
+                    topicRouteData.setQueueDatas(queueDataList);
+                    foundQueueData = true;
+
+                    Iterator<QueueData> it = queueDataList.iterator();
+                    while (it.hasNext()) {
+                        QueueData qd = it.next();
+                        brokerNameSet.add(qd.getBrokerName());
+                    }
+
+                    for (String brokerName : brokerNameSet) {
+                        BrokerData brokerData = this.brokerAddrTable.get(brokerName);
+                        if (null != brokerData) {
+                            BrokerData brokerDataClone = replaceIP1WithIP2(brokerData);
+                            brokerDataList.add(brokerDataClone);
+                            foundBrokerData = true;
+                            for (final String brokerAddr : brokerDataClone.getBrokerAddrs().values()) {
+                                List<String> filterServerList = this.filterServerTable.get(brokerAddr);
+                                filterServerMap.put(brokerAddr, filterServerList);
+                            }
+                        }
+                    }
+                }
+            } finally {
+                this.lock.readLock().unlock();
+            }
+        } catch (Exception e) {
+            log.error("pickupTopicRouteData Exception", e);
+        }
+
+        if (log.isDebugEnabled()) {
+            log.debug("pickupTopicRouteData {} {}", topic, topicRouteData);
+        }
+
+        if (foundBrokerData && foundQueueData) {
+            return topicRouteData;
+        }
+
+        return null;
+    }
+
+    public BrokerData replaceIP1WithIP2(BrokerData brokerData) {
+        HashMap<Long, String> brokerAddrs = (HashMap < Long, String >) brokerData.getBrokerAddrs().clone();
+        for (Entry<Long, String> brokerAddr : brokerData.getBrokerAddrs().entrySet()) {
+            long brokerId = brokerAddr.getKey();
+            String masterAddr = brokerAddr.getValue();
+            String haMasterAddr = brokerLiveTable.get(masterAddr).getHaServerAddr();
+            String addr = Utils.replace(masterAddr, haMasterAddr);
+            brokerAddrs.put(brokerId, addr);
+        }
+        return new BrokerData(brokerData.getCluster(), brokerData.getBrokerName(), brokerAddrs);
+    }
+
     public void scanNotActiveBroker() {
         Iterator<Entry<String, BrokerLiveInfo>> it = this.brokerLiveTable.entrySet().iterator();
         while (it.hasNext()) {
@@ -603,6 +689,42 @@ public class RouteInfoManager {
                     Iterator<String> it = brokerAddrTable.keySet().iterator();
                     while (it.hasNext()) {
                         BrokerData bd = brokerAddrTable.get(it.next());
+                        HashMap<Long, String> brokerAddrs = bd.getBrokerAddrs();
+                        if (brokerAddrs != null && !brokerAddrs.isEmpty()) {
+                            Iterator<Long> it2 = brokerAddrs.keySet().iterator();
+                            topicList.setBrokerAddr(brokerAddrs.get(it2.next()));
+                            break;
+                        }
+                    }
+                }
+            } finally {
+                this.lock.readLock().unlock();
+            }
+        } catch (Exception e) {
+            log.error("getAllTopicList Exception", e);
+        }
+
+        return topicList.encode();
+    }
+
+    public byte[] getSystemTopicList(boolean useIP2) {
+        if (!useIP2) {
+            return getSystemTopicList();
+        }
+        TopicList topicList = new TopicList();
+        try {
+            try {
+                this.lock.readLock().lockInterruptibly();
+                for (Map.Entry<String, Set<String>> entry : clusterAddrTable.entrySet()) {
+                    topicList.getTopicList().add(entry.getKey());
+                    topicList.getTopicList().addAll(entry.getValue());
+                }
+
+                if (brokerAddrTable != null && !brokerAddrTable.isEmpty()) {
+                    Iterator<String> it = brokerAddrTable.keySet().iterator();
+                    while (it.hasNext()) {
+                        BrokerData bd = brokerAddrTable.get(it.next());
+                        bd = replaceIP1WithIP2(bd);
                         HashMap<Long, String> brokerAddrs = bd.getBrokerAddrs();
                         if (brokerAddrs != null && !brokerAddrs.isEmpty()) {
                             Iterator<Long> it2 = brokerAddrs.keySet().iterator();
