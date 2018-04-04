@@ -728,17 +728,11 @@ public class BrokerController {
             this.brokerConfig.getRegisterBrokerTimeoutMills());
 
         if (registerBrokerResult != null) {
-            String masterAddr = "";
             if (this.updateMasterHAServerAddrPeriodically && registerBrokerResult.getHaServerAddr() != null) {
                 this.messageStore.updateHaMasterAddress(registerBrokerResult.getHaServerAddr());
-                String[] ipAndPort = registerBrokerResult.getHaServerAddr().split(":");
-                masterAddr = ipAndPort[0] + ":";
             }
 
-            String[] ipAndPort2 = registerBrokerResult.getMasterAddr().split(":");
-            masterAddr = masterAddr + ipAndPort2[1];
-            masterAddr = masterAddr.contains(":") ? masterAddr : registerBrokerResult.getMasterAddr();
-            this.slaveSynchronize.setMasterAddr(masterAddr);
+            this.slaveSynchronize.setMasterAddr(registerBrokerResult.getMasterAddr());
 
             if (checkOrderConfig) {
                 this.getTopicConfigManager().updateOrderTopicConfig(registerBrokerResult.getKvTable());
