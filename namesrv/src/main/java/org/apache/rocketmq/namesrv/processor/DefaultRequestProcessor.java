@@ -265,6 +265,9 @@ public class DefaultRequestProcessor implements NettyRequestProcessor {
     }
 
     public boolean isUseIp2(RemotingCommand request) {
+        if (request.getExtFields() == null) {
+            return false;
+        }
         String useIP2 = request.getExtFields().get("useIP2");
         boolean use = false;
         if (!StringUtil.isNullOrEmpty(useIP2) && "true".equals(useIP2)) {
