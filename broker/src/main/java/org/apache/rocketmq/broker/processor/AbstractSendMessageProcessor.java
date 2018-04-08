@@ -64,7 +64,7 @@ public abstract class AbstractSendMessageProcessor implements NettyRequestProces
     public AbstractSendMessageProcessor(final BrokerController brokerController) {
         this.brokerController = brokerController;
         this.storeHost =
-            new InetSocketAddress(brokerController.getBrokerConfig().getBrokerIP1(), brokerController
+            new InetSocketAddress(brokerController.getBrokerConfig().getBrokerIP2(), brokerController
                 .getNettyServerConfig().getListenPort());
     }
 
