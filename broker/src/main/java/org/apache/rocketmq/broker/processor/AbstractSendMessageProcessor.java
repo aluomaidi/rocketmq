@@ -58,7 +58,7 @@ public abstract class AbstractSendMessageProcessor implements NettyRequestProces
     protected final static int DLQ_NUMS_PER_GROUP = 1;
     protected final BrokerController brokerController;
     protected final Random random = new Random(System.currentTimeMillis());
-    protected final SocketAddress storeHost;
+    protected SocketAddress storeHost;
     private List<SendMessageHook> sendMessageHookList;
 
     public AbstractSendMessageProcessor(final BrokerController brokerController) {

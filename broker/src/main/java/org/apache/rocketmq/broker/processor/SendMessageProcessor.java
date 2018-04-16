@@ -17,8 +17,6 @@
 package org.apache.rocketmq.broker.processor;
 
 import io.netty.channel.ChannelHandlerContext;
-import java.net.SocketAddress;
-import java.util.List;
 import org.apache.rocketmq.broker.BrokerController;
 import org.apache.rocketmq.broker.mqtrace.ConsumeMessageContext;
 import org.apache.rocketmq.broker.mqtrace.ConsumeMessageHook;
@@ -50,6 +48,10 @@ import org.apache.rocketmq.store.MessageExtBrokerInner;
 import org.apache.rocketmq.store.PutMessageResult;
 import org.apache.rocketmq.store.config.StorePathConfigHelper;
 import org.apache.rocketmq.store.stats.BrokerStatsManager;
+
+import java.net.InetSocketAddress;
+import java.net.SocketAddress;
+import java.util.List;
 
 public class SendMessageProcessor extends AbstractSendMessageProcessor implements NettyRequestProcessor {
 
@@ -551,6 +553,12 @@ public class SendMessageProcessor extends AbstractSendMessageProcessor implement
     }
 
     public SocketAddress getStoreHost() {
+        InetSocketAddress addr = (InetSocketAddress) storeHost;
+        if (addr.getAddress() == null) {
+            storeHost = new InetSocketAddress(brokerController.getBrokerConfig().getBrokerIP2(), brokerController
+                    .getNettyServerConfig().getListenPort());
+            log.warn("renew storeHost for parse hostName!");
+        }
         return storeHost;
     }
 
