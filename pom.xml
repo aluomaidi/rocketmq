@@ -27,7 +27,7 @@
     <modelVersion>4.0.0</modelVersion>
 
     <inceptionYear>2012</inceptionYear>
-    <groupId>org.apache.rocketmq</groupId>
+    <groupId>com.xfyun.rocketmq</groupId>
     <artifactId>rocketmq-all</artifactId>
     <version>4.2.0</version>
     <packaging>pom</packaging>
@@ -518,7 +518,7 @@
                 <version>${project.version}</version>
             </dependency>
             <dependency>
-                <groupId>org.apache.rocketmq</groupId>
+                <groupId>${project.groupId}</groupId>
                 <artifactId>rocketmq-filter</artifactId>
                 <version>${project.version}</version>
             </dependency>
@@ -599,4 +599,14 @@
             </dependency>
         </dependencies>
     </dependencyManagement>
+    <distributionManagement>
+        <repository>
+            <id>rdc-releases</id>
+            <url>https://repo.rdc.aliyun.com/repository/109879-release-vdykQA/</url>
+        </repository>
+        <snapshotRepository>
+            <id>rdc-snapshots</id>
+            <url>https://repo.rdc.aliyun.com/repository/109879-snapshot-5EDYto/</url>
+        </snapshotRepository>
+    </distributionManagement>
 </project>
