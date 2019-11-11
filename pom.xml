@@ -601,12 +601,12 @@
     </dependencyManagement>
     <distributionManagement>
         <repository>
-            <id>rdc-releases</id>
-            <url>https://repo.rdc.aliyun.com/repository/109879-release-vdykQA/</url>
+            <id>release</id>
+            <url>http://maven.iflytek.com:8081/nexus/content/repositories/RS-odeon-releases/</url>
         </repository>
         <snapshotRepository>
-            <id>rdc-snapshots</id>
-            <url>https://repo.rdc.aliyun.com/repository/109879-snapshot-5EDYto/</url>
+            <id>snapshot</id>
+            <url>http://maven.iflytek.com:8081/nexus/content/repositories/RS-odeon-snapshots/</url>
         </snapshotRepository>
     </distributionManagement>
 </project>
